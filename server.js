@@ -19,6 +19,7 @@ wss.on("connection", ws => {
     let data;
     try { data = JSON.parse(msg); } catch { return; }
 
+    // Рисование
     if (data.type === "paint") {
       pixels[data.index] = data.color;
 
@@ -29,6 +30,21 @@ wss.on("connection", ws => {
             index: data.index,
             color: data.color
           }));
+        }
+      });
+    }
+
+    // Чат
+    if (data.type === "chat") {
+      const msg = {
+        type: "chat",
+        nick: data.nick,
+        text: data.text
+      };
+
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(msg));
         }
       });
     }
