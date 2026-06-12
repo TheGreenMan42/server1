@@ -36,15 +36,15 @@ wss.on("connection", ws => {
 
     // Чат
     if (data.type === "chat") {
-      const msg = {
-        type: "chat",
-        nick: data.nick,
-        text: data.text
-      };
+      console.log("CHAT:", data);
 
       wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(msg));
+          client.send(JSON.stringify({
+            type: "chat",
+            nick: data.nick,
+            text: data.text
+          }));
         }
       });
     }
