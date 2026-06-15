@@ -1,6 +1,5 @@
 const WebSocket = require("ws");
 const http = require("http");
-const fs = require("fs");
 
 const PORT = process.env.PORT || 3000;
 
@@ -11,162 +10,42 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-// === ПОЛЕ 50x50 ===
-let pixels = Array(50 * 50).fill("#ffffff");
-
-// === ДАННЫЕ ИГРОКОВ ===
-let players = {}; // playerId: { pixels, unlockedColors, color, lastAward }
-
-// === ЗАГРУЗКА СТАТИСТИКИ ===
-try {
-  if (fs.existsSync("pixelstats.json")) {
-    const data = JSON.parse(fs.readFileSync("pixelstats.json", "utf8"));
-    players = data.players || {};
-  }
-} catch (e) {
-  console.log("Ошибка загрузки pixelstats.json:", e);
-}
-
-// === СОХРАНЕНИЕ ===
-function saveStats() {
-  fs.writeFileSync("pixelstats.json", JSON.stringify({
-    players
-  }));
-}
-
-// === ОТПРАВКА ВСЕМ ===
-function broadcast(obj) {
-  const payload = JSON.stringify(obj);
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
-  });
-}
+let pixels = Array(25 * 25).fill("#ffffff");
 
 wss.on("connection", ws => {
-  const playerId = Math.floor(Math.random() * 1000001);
-  ws.playerId = playerId;
-
-  if (!players[playerId]) {
-    players[playerId] = {
-      pixels: 0,
-      unlockedColors: [
-        "black", "white", "blue", "red", "yellow",
-        "cyan", "green", "pink", "purple"
-      ],
-      color: "#000000",
-      lastAward: 0
-    };
-  }
-
   ws.send(JSON.stringify({ type: "init", pixels }));
-
-  ws.send(JSON.stringify({
-    type: "playerPixels",
-    count: players[playerId].pixels
-  }));
-
-  ws.send(JSON.stringify({
-    type: "setColor",
-    color: players[playerId].color
-  }));
-
-  ws.send(JSON.stringify({
-    type: "unlockedColors",
-    colors: players[playerId].unlockedColors
-  }));
-
-  broadcast({
-    type: "serverMessage",
-    text: `Player [${playerId}] joined in game.`
-  });
 
   ws.on("message", msg => {
     let data;
     try { data = JSON.parse(msg); } catch { return; }
 
-    // === ЗАПРОС НА СМЕНУ ЦВЕТА ===
-    if (data.type === "requestColor") {
-      const col = data.color;
-      if (players[playerId].unlockedColors.includes(col)) {
-        players[playerId].color = col;
-        ws.send(JSON.stringify({
-          type: "setColor",
-          color: col
-        }));
-        saveStats();
-      }
-    }
-
-    // === РИСОВАНИЕ ===
+    // Рисование
     if (data.type === "paint") {
-      if (typeof data.index !== "number") return;
-      if (data.index < 0 || data.index >= pixels.length) return;
+      pixels[data.index] = data.color;
 
-      const newColor = players[playerId].color;
-
-      // === ОБНОВЛЕНИЕ ПИКСЕЛЯ ВСЕМ ===
-      broadcast({
-        type: "update",
-        index: data.index,
-        color: newColor
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "update",
+            index: data.index,
+            color: data.color
+          }));
+        }
       });
-
-      // === ЕСЛИ ЦВЕТ НЕ МЕНЯЕТСЯ — НИЧЕГО НЕ ДЕЛАЕМ ===
-      if (pixels[data.index] === newColor) return;
-
-      pixels[data.index] = newColor;
-
-      // === АНТИ-СПАМ: 1 ОЧКО КАЖДЫЕ 200 МС ===
-      const now = Date.now();
-      if (now - players[playerId].lastAward >= 200) {
-
-        players[playerId].lastAward = now;
-
-        players[playerId].pixels++;
-        ws.send(JSON.stringify({
-          type: "playerPixels",
-          count: players[playerId].pixels
-        }));
-
-        saveStats();
-      }
     }
 
-    // === ПОКУПКА ЦВЕТА ===
-    if (data.type === "buyColor") {
-      const col = data.color;
-      const cost = {
-        gray: 150,
-        orange: 500,
-        darkgreen: 999
-      };
-
-      if (!cost[col]) return;
-      if (players[playerId].unlockedColors.includes(col)) return;
-      if (players[playerId].pixels < cost[col]) return;
-
-      players[playerId].unlockedColors.push(col);
-
-      ws.send(JSON.stringify({
-        type: "unlockColor",
-        color: col
-      }));
-
-      saveStats();
-    }
-
-    // === ЧАТ ===
+    // Чат
     if (data.type === "chat") {
-      const nick = (data.nick || "").trim();
-      if (!nick || nick.toLowerCase() === "server") return;
+      console.log("CHAT:", data);
 
-      broadcast({
-        type: "chat",
-        nick: nick,
-        text: data.text || "",
-        color: players[playerId].color
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "chat",
+            nick: data.nick,
+            text: data.text
+          }));
+        }
       });
     }
   });
