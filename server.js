@@ -14,9 +14,6 @@ const wss = new WebSocket.Server({ server });
 // === ПОЛЕ 50x50 ===
 let pixels = Array(50 * 50).fill("#ffffff");
 
-// === ГЛОБАЛЬНЫЙ СЧЁТЧИК ===
-let globalPixelCount = 0;
-
 // === ДАННЫЕ ИГРОКОВ ===
 let players = {}; // playerId: { pixels, unlockedColors, color, lastAward }
 
@@ -24,7 +21,6 @@ let players = {}; // playerId: { pixels, unlockedColors, color, lastAward }
 try {
   if (fs.existsSync("pixelstats.json")) {
     const data = JSON.parse(fs.readFileSync("pixelstats.json", "utf8"));
-    globalPixelCount = data.globalPixelCount || 0;
     players = data.players || {};
   }
 } catch (e) {
@@ -34,7 +30,6 @@ try {
 // === СОХРАНЕНИЕ ===
 function saveStats() {
   fs.writeFileSync("pixelstats.json", JSON.stringify({
-    globalPixelCount,
     players
   }));
 }
@@ -66,11 +61,6 @@ wss.on("connection", ws => {
   }
 
   ws.send(JSON.stringify({ type: "init", pixels }));
-
-  ws.send(JSON.stringify({
-    type: "globalPixels",
-    count: globalPixelCount
-  }));
 
   ws.send(JSON.stringify({
     type: "playerPixels",
@@ -139,12 +129,6 @@ wss.on("connection", ws => {
           type: "playerPixels",
           count: players[playerId].pixels
         }));
-
-        globalPixelCount++;
-        broadcast({
-          type: "globalPixels",
-          count: globalPixelCount
-        });
 
         saveStats();
       }
