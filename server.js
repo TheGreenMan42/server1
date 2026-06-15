@@ -50,29 +50,27 @@ function broadcast(obj) {
 }
 
 wss.on("connection", ws => {
-  // === РАНДОМНЫЙ ID ===
   const playerId = Math.floor(Math.random() * 1000001);
   ws.playerId = playerId;
 
-  // === СОЗДАЁМ ИГРОКА ===
   if (!players[playerId]) {
     players[playerId] = {
       pixels: 0,
-      unlockedColors: ["black", "white", "blue", "red", "yellow", "cyan", "green", "pink", "purple"],
+      unlockedColors: [
+        "black", "white", "blue", "red", "yellow",
+        "cyan", "green", "pink", "purple"
+      ],
       color: "#000000"
     };
   }
 
-  // === ОТПРАВЛЯЕМ ПОЛЕ ===
   ws.send(JSON.stringify({ type: "init", pixels }));
 
-  // === ОТПРАВЛЯЕМ ГЛОБАЛЬНЫЙ СЧЁТЧИК ===
   ws.send(JSON.stringify({
     type: "globalPixels",
     count: globalPixelCount
   }));
 
-  // === ОТПРАВЛЯЕМ ЛИЧНЫЕ ДАННЫЕ ===
   ws.send(JSON.stringify({
     type: "playerPixels",
     count: players[playerId].pixels
@@ -88,7 +86,6 @@ wss.on("connection", ws => {
     colors: players[playerId].unlockedColors
   }));
 
-  // === СООБЩЕНИЕ О ВХОДЕ ===
   broadcast({
     type: "serverMessage",
     text: `Player [${playerId}] joined in game.`
@@ -116,30 +113,32 @@ wss.on("connection", ws => {
       if (typeof data.index !== "number") return;
       if (data.index < 0 || data.index >= pixels.length) return;
 
-      const color = players[playerId].color;
-      pixels[data.index] = color;
+      const newColor = players[playerId].color;
 
-      // === ЛИЧНЫЙ СЧЁТЧИК ===
-      players[playerId].pixels++;
-      ws.send(JSON.stringify({
-        type: "playerPixels",
-        count: players[playerId].pixels
-      }));
+      // === СЧИТАЕМ ТОЛЬКО ЕСЛИ ЦВЕТ ИЗМЕНИЛСЯ ===
+      if (pixels[data.index] !== newColor) {
 
-      // === ГЛОБАЛЬНЫЙ СЧЁТЧИК ===
-      globalPixelCount++;
-      broadcast({
-        type: "globalPixels",
-        count: globalPixelCount
-      });
+        pixels[data.index] = newColor;
 
-      saveStats();
+        players[playerId].pixels++;
+        ws.send(JSON.stringify({
+          type: "playerPixels",
+          count: players[playerId].pixels
+        }));
 
-      // === ОБНОВЛЕНИЕ ПИКСЕЛЯ ВСЕМ ===
+        globalPixelCount++;
+        broadcast({
+          type: "globalPixels",
+          count: globalPixelCount
+        });
+
+        saveStats();
+      }
+
       broadcast({
         type: "update",
         index: data.index,
-        color: color
+        color: newColor
       });
     }
 
