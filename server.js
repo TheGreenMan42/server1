@@ -1,56 +1,67 @@
 const WebSocket = require("ws");
-const http = require("http");
 
-const PORT = process.env.PORT || 3000;
+const PORT = 8080;
+const GRID_SIZE = 50;
+const TOTAL_PIXELS = GRID_SIZE * GRID_SIZE;
 
-const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("Pixel server is running");
-});
+const wss = new WebSocket.Server({ port: PORT });
 
-const wss = new WebSocket.Server({ server });
+const pixels = Array(TOTAL_PIXELS).fill("#ffffff");
 
-let pixels = Array(25 * 25).fill("#ffffff");
+wss.on("connection", (ws) => {
+    console.log("Кто-то подключился");
 
-wss.on("connection", ws => {
-  ws.send(JSON.stringify({ type: "init", pixels }));
+    ws.send(JSON.stringify({
+        type: "init",
+        pixels: pixels
+    }));
 
-  ws.on("message", msg => {
-    let data;
-    try { data = JSON.parse(msg); } catch { return; }
+    ws.on("message", (msg) => {
+        let data;
+        try { data = JSON.parse(msg); } catch { return; }
 
-    // Рисование
-    if (data.type === "paint") {
-      pixels[data.index] = data.color;
+        if (data.type === "paint") {
+            const i = data.index;
+            const color = data.color;
 
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "update",
-            index: data.index,
-            color: data.color
-          }));
+            if (typeof i !== "number") return;
+            if (i < 0 || i >= TOTAL_PIXELS) return;
+            if (typeof color !== "string") return;
+
+            pixels[i] = color;
+
+            const payload = JSON.stringify({
+                type: "update",
+                index: i,
+                color: color
+            });
+
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(payload);
+                }
+            });
         }
-      });
-    }
 
-    // Чат
-    if (data.type === "chat") {
-      console.log("CHAT:", data);
+        if (data.type === "chat") {
+            const payload = JSON.stringify({
+                type: "chat",
+                nick: data.nick || "Unknown",
+                text: data.text || "",
+                color: data.color || "#ffffff"
+            });
 
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "chat",
-            nick: data.nick,
-            text: data.text
-          }));
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(payload);
+                }
+            });
         }
-      });
-    }
-  });
+    });
+
+    ws.on("close", () => {
+        console.log("Кто-то отключился");
+    });
 });
 
-server.listen(PORT, () => {
-  console.log("Server listening on port", PORT);
-});
+console.log(`Сервер запущен на порту ${PORT}, поле ${GRID_SIZE}x${GRID_SIZE}`);
