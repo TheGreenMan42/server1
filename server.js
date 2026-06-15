@@ -18,7 +18,7 @@ let pixels = Array(50 * 50).fill("#ffffff");
 let globalPixelCount = 0;
 
 // === ДАННЫЕ ИГРОКОВ ===
-let players = {}; // playerId: { pixels, unlockedColors, color }
+let players = {}; // playerId: { pixels, unlockedColors, color, lastAward }
 
 // === ЗАГРУЗКА СТАТИСТИКИ ===
 try {
@@ -60,7 +60,8 @@ wss.on("connection", ws => {
         "black", "white", "blue", "red", "yellow",
         "cyan", "green", "pink", "purple"
       ],
-      color: "#000000"
+      color: "#000000",
+      lastAward: 0
     };
   }
 
@@ -115,10 +116,23 @@ wss.on("connection", ws => {
 
       const newColor = players[playerId].color;
 
-      // === СЧИТАЕМ ТОЛЬКО ЕСЛИ ЦВЕТ ИЗМЕНИЛСЯ ===
-      if (pixels[data.index] !== newColor) {
+      // === ОБНОВЛЕНИЕ ПИКСЕЛЯ ВСЕМ ===
+      broadcast({
+        type: "update",
+        index: data.index,
+        color: newColor
+      });
 
-        pixels[data.index] = newColor;
+      // === ЕСЛИ ЦВЕТ НЕ МЕНЯЕТСЯ — НИЧЕГО НЕ ДЕЛАЕМ ===
+      if (pixels[data.index] === newColor) return;
+
+      pixels[data.index] = newColor;
+
+      // === АНТИ-СПАМ: 1 ОЧКО КАЖДЫЕ 200 МС ===
+      const now = Date.now();
+      if (now - players[playerId].lastAward >= 200) {
+
+        players[playerId].lastAward = now;
 
         players[playerId].pixels++;
         ws.send(JSON.stringify({
@@ -134,12 +148,6 @@ wss.on("connection", ws => {
 
         saveStats();
       }
-
-      broadcast({
-        type: "update",
-        index: data.index,
-        color: newColor
-      });
     }
 
     // === ПОКУПКА ЦВЕТА ===
