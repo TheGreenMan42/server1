@@ -1,5 +1,6 @@
 const WebSocket = require("ws");
 const http = require("http");
+const fs = require("fs");
 
 const PORT = process.env.PORT || 3000;
 
@@ -10,9 +11,30 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-// ПОЛЕ 50x50
+// === ПОЛЕ 50x50 ===
 let pixels = Array(50 * 50).fill("#ffffff");
 
+// === ГЛОБАЛЬНЫЙ СЧЁТЧИК ===
+let globalPixelCount = 0;
+
+// Загружаем сохранённый счётчик
+try {
+  if (fs.existsSync("pixelstats.json")) {
+    const data = JSON.parse(fs.readFileSync("pixelstats.json", "utf8"));
+    globalPixelCount = data.globalPixelCount || 0;
+  }
+} catch (e) {
+  console.log("Ошибка загрузки pixelstats.json:", e);
+}
+
+// Сохранение счётчика
+function saveStats() {
+  fs.writeFileSync("pixelstats.json", JSON.stringify({
+    globalPixelCount
+  }));
+}
+
+// Отправка всем
 function broadcast(obj) {
   const payload = JSON.stringify(obj);
   wss.clients.forEach(client => {
@@ -23,14 +45,20 @@ function broadcast(obj) {
 }
 
 wss.on("connection", ws => {
-  // Рандомный ID игрока 0–1000000
+  // Рандомный ID игрока
   const playerId = Math.floor(Math.random() * 1000001);
   ws.playerId = playerId;
 
   // Отправляем поле
   ws.send(JSON.stringify({ type: "init", pixels }));
 
-  // Серверное сообщение о входе
+  // Отправляем глобальный счётчик
+  ws.send(JSON.stringify({
+    type: "globalPixels",
+    count: globalPixelCount
+  }));
+
+  // Сообщение о входе
   broadcast({
     type: "serverMessage",
     text: `Player [${playerId}] joined in game.`
@@ -40,7 +68,7 @@ wss.on("connection", ws => {
     let data;
     try { data = JSON.parse(msg); } catch { return; }
 
-    // Рисование
+    // === РИСОВАНИЕ ===
     if (data.type === "paint") {
       if (typeof data.index !== "number") return;
       if (data.index < 0 || data.index >= pixels.length) return;
@@ -48,16 +76,26 @@ wss.on("connection", ws => {
 
       pixels[data.index] = data.color;
 
+      // Увеличиваем глобальный счётчик
+      globalPixelCount++;
+      saveStats();
+
+      // Отправляем обновление пикселя
       broadcast({
         type: "update",
         index: data.index,
         color: data.color
       });
+
+      // Отправляем обновлённый глобальный счётчик
+      broadcast({
+        type: "globalPixels",
+        count: globalPixelCount
+      });
     }
 
-    // Чат
+    // === ЧАТ ===
     if (data.type === "chat") {
-      // Ник "Server" запрещён
       const nick = (data.nick || "").trim();
       if (!nick || nick.toLowerCase() === "server") return;
 
@@ -68,10 +106,6 @@ wss.on("connection", ws => {
         color: data.color || "#ffffff"
       });
     }
-  });
-
-  ws.on("close", () => {
-    console.log("Кто-то отключился");
   });
 });
 
