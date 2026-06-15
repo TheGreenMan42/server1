@@ -10,7 +10,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-let pixels = Array(50 * 50).fill("#ffffff");
+let pixels = Array(20 * 20).fill("#ffffff");
 
 wss.on("connection", ws => {
   ws.send(JSON.stringify({ type: "init", pixels }));
