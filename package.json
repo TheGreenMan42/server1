@@ -1,6 +1,6 @@
 {
-  "name": "pixel-server",
-  "version": "1.0.0",
+  "name": "cows",
+  "version": "1.0.2",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
